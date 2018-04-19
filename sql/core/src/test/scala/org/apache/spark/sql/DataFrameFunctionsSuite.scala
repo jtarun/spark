@@ -413,6 +413,162 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("array_min function") {
+    val df = Seq(
+      Seq[Option[Int]](Some(1), Some(3), Some(2)),
+      Seq.empty[Option[Int]],
+      Seq[Option[Int]](None),
+      Seq[Option[Int]](None, Some(1), Some(-100))
+    ).toDF("a")
+
+    val answer = Seq(Row(1), Row(null), Row(null), Row(-100))
+
+    checkAnswer(df.select(array_min(df("a"))), answer)
+    checkAnswer(df.selectExpr("array_min(a)"), answer)
+  }
+
+  test("array_max function") {
+    val df = Seq(
+      Seq[Option[Int]](Some(1), Some(3), Some(2)),
+      Seq.empty[Option[Int]],
+      Seq[Option[Int]](None),
+      Seq[Option[Int]](None, Some(1), Some(-100))
+    ).toDF("a")
+
+    val answer = Seq(Row(3), Row(null), Row(null), Row(1))
+
+    checkAnswer(df.select(array_max(df("a"))), answer)
+    checkAnswer(df.selectExpr("array_max(a)"), answer)
+  }
+
+  test("reverse function") {
+    val dummyFilter = (c: Column) => c.isNull || c.isNotNull // switch codegen on
+
+    // String test cases
+    val oneRowDF = Seq(("Spark", 3215)).toDF("s", "i")
+
+    checkAnswer(
+      oneRowDF.select(reverse('s)),
+      Seq(Row("krapS"))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("reverse(s)"),
+      Seq(Row("krapS"))
+    )
+    checkAnswer(
+      oneRowDF.select(reverse('i)),
+      Seq(Row("5123"))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("reverse(i)"),
+      Seq(Row("5123"))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("reverse(null)"),
+      Seq(Row(null))
+    )
+
+    // Array test cases (primitive-type elements)
+    val idf = Seq(
+      Seq(1, 9, 8, 7),
+      Seq(5, 8, 9, 7, 2),
+      Seq.empty,
+      null
+    ).toDF("i")
+
+    checkAnswer(
+      idf.select(reverse('i)),
+      Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      idf.filter(dummyFilter('i)).select(reverse('i)),
+      Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      idf.selectExpr("reverse(i)"),
+      Seq(Row(Seq(7, 8, 9, 1)), Row(Seq(2, 7, 9, 8, 5)), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("reverse(array(1, null, 2, null))"),
+      Seq(Row(Seq(null, 2, null, 1)))
+    )
+    checkAnswer(
+      oneRowDF.filter(dummyFilter('i)).selectExpr("reverse(array(1, null, 2, null))"),
+      Seq(Row(Seq(null, 2, null, 1)))
+    )
+
+    // Array test cases (non-primitive-type elements)
+    val sdf = Seq(
+      Seq("c", "a", "b"),
+      Seq("b", null, "c", null),
+      Seq.empty,
+      null
+    ).toDF("s")
+
+    checkAnswer(
+      sdf.select(reverse('s)),
+      Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      sdf.filter(dummyFilter('s)).select(reverse('s)),
+      Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      sdf.selectExpr("reverse(s)"),
+      Seq(Row(Seq("b", "a", "c")), Row(Seq(null, "c", null, "b")), Row(Seq.empty), Row(null))
+    )
+    checkAnswer(
+      oneRowDF.selectExpr("reverse(array(array(1, 2), array(3, 4)))"),
+      Seq(Row(Seq(Seq(3, 4), Seq(1, 2))))
+    )
+    checkAnswer(
+      oneRowDF.filter(dummyFilter('s)).selectExpr("reverse(array(array(1, 2), array(3, 4)))"),
+      Seq(Row(Seq(Seq(3, 4), Seq(1, 2))))
+    )
+
+    // Error test cases
+    intercept[AnalysisException] {
+      oneRowDF.selectExpr("reverse(struct(1, 'a'))")
+    }
+    intercept[AnalysisException] {
+      oneRowDF.selectExpr("reverse(map(1, 'a'))")
+    }
+  }
+
+  test("array position function") {
+    val df = Seq(
+      (Seq[Int](1, 2), "x"),
+      (Seq[Int](), "x")
+    ).toDF("a", "b")
+
+    checkAnswer(
+      df.select(array_position(df("a"), 1)),
+      Seq(Row(1L), Row(0L))
+    )
+    checkAnswer(
+      df.selectExpr("array_position(a, 1)"),
+      Seq(Row(1L), Row(0L))
+    )
+
+    checkAnswer(
+      df.select(array_position(df("a"), null)),
+      Seq(Row(null), Row(null))
+    )
+    checkAnswer(
+      df.selectExpr("array_position(a, null)"),
+      Seq(Row(null), Row(null))
+    )
+
+    checkAnswer(
+      df.selectExpr("array_position(array(array(1), null)[0], 1)"),
+      Seq(Row(1L), Row(1L))
+    )
+    checkAnswer(
+      df.selectExpr("array_position(array(1, null), array(1, null)[0])"),
+      Seq(Row(1L), Row(1L))
+    )
+  }
+
   private def assertValuesDoNotChangeAfterCoalesceOrUnion(v: Column): Unit = {
     import DataFrameFunctionsSuite.CodegenFallbackExpr
     for ((codegenFallback, wholeStage) <- Seq((true, false), (false, false), (false, true))) {
@@ -422,7 +578,7 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
         v
       }
       withSQLConf(
-        (SQLConf.WHOLESTAGE_FALLBACK.key, codegenFallback.toString),
+        (SQLConf.CODEGEN_FALLBACK.key, codegenFallback.toString),
         (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStage.toString)) {
         val df = spark.range(0, 4, 1, 4).withColumn("c", c)
         val rows = df.collect()
@@ -447,6 +603,42 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       monotonically_increasing_id(), spark_partition_id(),
       rand(Random.nextLong()), randn(Random.nextLong())
     ).foreach(assertValuesDoNotChangeAfterCoalesceOrUnion(_))
+  }
+
+  test("SPARK-21281 use string types by default if array and map have no argument") {
+    val ds = spark.range(1)
+    var expectedSchema = new StructType()
+      .add("x", ArrayType(StringType, containsNull = false), nullable = false)
+    assert(ds.select(array().as("x")).schema == expectedSchema)
+    expectedSchema = new StructType()
+      .add("x", MapType(StringType, StringType, valueContainsNull = false), nullable = false)
+    assert(ds.select(map().as("x")).schema == expectedSchema)
+  }
+
+  test("SPARK-21281 fails if functions have no argument") {
+    val df = Seq(1).toDF("a")
+
+    val funcsMustHaveAtLeastOneArg =
+      ("coalesce", (df: DataFrame) => df.select(coalesce())) ::
+      ("coalesce", (df: DataFrame) => df.selectExpr("coalesce()")) ::
+      ("named_struct", (df: DataFrame) => df.select(struct())) ::
+      ("named_struct", (df: DataFrame) => df.selectExpr("named_struct()")) ::
+      ("hash", (df: DataFrame) => df.select(hash())) ::
+      ("hash", (df: DataFrame) => df.selectExpr("hash()")) :: Nil
+    funcsMustHaveAtLeastOneArg.foreach { case (name, func) =>
+      val errMsg = intercept[AnalysisException] { func(df) }.getMessage
+      assert(errMsg.contains(s"input to function $name requires at least one argument"))
+    }
+
+    val funcsMustHaveAtLeastTwoArgs =
+      ("greatest", (df: DataFrame) => df.select(greatest())) ::
+      ("greatest", (df: DataFrame) => df.selectExpr("greatest()")) ::
+      ("least", (df: DataFrame) => df.select(least())) ::
+      ("least", (df: DataFrame) => df.selectExpr("least()")) :: Nil
+    funcsMustHaveAtLeastTwoArgs.foreach { case (name, func) =>
+      val errMsg = intercept[AnalysisException] { func(df) }.getMessage
+      assert(errMsg.contains(s"input to function $name requires at least two arguments"))
+    }
   }
 }
 

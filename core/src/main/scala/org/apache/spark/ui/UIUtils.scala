@@ -224,6 +224,7 @@ private[spark] object UIUtils extends Logging {
         {commonHeaderNodes}
         {if (showVisualization) vizHeaderNodes else Seq.empty}
         {if (useDataTables) dataTablesHeaderNodes else Seq.empty}
+        <link rel="shortcut icon" href={prependBaseUri("/static/spark-logo-77x50px-hd.png")}></link>
         <title>{appName} - {title}</title>
       </head>
       <body>
@@ -265,6 +266,7 @@ private[spark] object UIUtils extends Logging {
       <head>
         {commonHeaderNodes}
         {if (useDataTables) dataTablesHeaderNodes else Seq.empty}
+        <link rel="shortcut icon" href={prependBaseUri("/static/spark-logo-77x50px-hd.png")}></link>
         <title>{title}</title>
       </head>
       <body>
@@ -356,6 +358,7 @@ private[spark] object UIUtils extends Logging {
     <div class="progress">
       <span style="text-align:center; position:absolute; width:100%; left:0;">
         {completed}/{total}
+        { if (failed == 0 && skipped == 0 && started > 0) s"($started running)" }
         { if (failed > 0) s"($failed failed)" }
         { if (skipped > 0) s"($skipped skipped)" }
         { reasonToNumKilled.toSeq.sortBy(-_._2).map {

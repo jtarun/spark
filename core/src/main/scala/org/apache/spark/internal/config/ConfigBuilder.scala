@@ -23,12 +23,13 @@ import java.util.regex.PatternSyntaxException
 import scala.util.matching.Regex
 
 import org.apache.spark.network.util.{ByteUnit, JavaUtils}
+import org.apache.spark.util.Utils
 
 private object ConfigHelpers {
 
   def toNumber[T](s: String, converter: String => T, key: String, configType: String): T = {
     try {
-      converter(s)
+      converter(s.trim)
     } catch {
       case _: NumberFormatException =>
         throw new IllegalArgumentException(s"$key should be $configType, but was $s")
@@ -37,7 +38,7 @@ private object ConfigHelpers {
 
   def toBoolean(s: String, key: String): Boolean = {
     try {
-      s.toBoolean
+      s.trim.toBoolean
     } catch {
       case _: IllegalArgumentException =>
         throw new IllegalArgumentException(s"$key should be boolean, but was $s")
@@ -45,7 +46,7 @@ private object ConfigHelpers {
   }
 
   def stringToSeq[T](str: String, converter: String => T): Seq[T] = {
-    str.split(",").map(_.trim()).filter(_.nonEmpty).map(converter)
+    Utils.stringToSeq(str).map(converter)
   }
 
   def seqToString[T](v: Seq[T], stringConverter: T => String): String = {
@@ -235,7 +236,9 @@ private[spark] case class ConfigBuilder(key: String) {
   }
 
   def fallbackConf[T](fallback: ConfigEntry[T]): ConfigEntry[T] = {
-    new FallbackConfigEntry(key, _alternatives, _doc, _public, fallback)
+    val entry = new FallbackConfigEntry(key, _alternatives, _doc, _public, fallback)
+    _onCreate.foreach(_(entry))
+    entry
   }
 
   def regexConf: TypedConfigBuilder[Regex] = {

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
+import java.nio.charset.StandardCharsets
 import java.util.{Locale, TimeZone}
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonParser}
@@ -64,6 +65,8 @@ private[sql] class JSONOptions(
     parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true)
   val allowBackslashEscapingAnyCharacter =
     parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
+  private val allowUnquotedControlChars =
+    parameters.get("allowUnquotedControlChars").map(_.toBoolean).getOrElse(false)
   val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
   val parseMode: ParseMode =
     parameters.get("mode").map(ParseMode.fromString).getOrElse(PermissiveMode)
@@ -81,7 +84,17 @@ private[sql] class JSONOptions(
     FastDateFormat.getInstance(
       parameters.getOrElse("timestampFormat", "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"), timeZone, Locale.US)
 
-  val wholeFile = parameters.get("wholeFile").map(_.toBoolean).getOrElse(false)
+  val multiLine = parameters.get("multiLine").map(_.toBoolean).getOrElse(false)
+
+  val lineSeparator: Option[String] = parameters.get("lineSep").map { sep =>
+    require(sep.nonEmpty, "'lineSep' cannot be an empty string.")
+    sep
+  }
+  // Note that the option 'lineSep' uses a different default value in read and write.
+  val lineSeparatorInRead: Option[Array[Byte]] =
+    lineSeparator.map(_.getBytes(StandardCharsets.UTF_8))
+  // Note that JSON uses writer with UTF-8 charset. This string will be written out as UTF-8.
+  val lineSeparatorInWrite: String = lineSeparator.getOrElse("\n")
 
   /** Sets config options on a Jackson [[JsonFactory]]. */
   def setJacksonOptions(factory: JsonFactory): Unit = {
@@ -92,5 +105,6 @@ private[sql] class JSONOptions(
     factory.configure(JsonParser.Feature.ALLOW_NON_NUMERIC_NUMBERS, allowNonNumericNumbers)
     factory.configure(JsonParser.Feature.ALLOW_BACKSLASH_ESCAPING_ANY_CHARACTER,
       allowBackslashEscapingAnyCharacter)
+    factory.configure(JsonParser.Feature.ALLOW_UNQUOTED_CONTROL_CHARS, allowUnquotedControlChars)
   }
 }
